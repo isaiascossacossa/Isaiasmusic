@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#071a3d">
+  <title>ISAIAS MUSIC — A tua música, o teu mundo</title>
+  <style>
+    :root{--bg:#071326;--panel:#102447;--blue:#2878ff;--cyan:#25d5e8;--text:#f4f7ff;--muted:#aab9d2}
+    *{box-sizing:border-box}body{margin:0;background:linear-gradient(160deg,#061126,#0c2450);color:var(--text);font:16px system-ui,Arial,sans-serif;min-height:100vh}
+    header{padding:24px 16px 18px;text-align:center;background:#061126;border-bottom:1px solid #23416d}
+    .logo{width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,var(--blue),var(--cyan));display:grid;place-items:center;margin:0 auto 10px;font-size:30px}
+    h1{margin:0;font-size:26px;letter-spacing:1px}header p{margin:6px 0 0;color:var(--muted)}
+    main{width:min(920px,100%);margin:auto;padding:18px 14px 48px}
+    .panel{background:rgba(16,36,71,.96);border:1px solid #294875;border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 10px 28px #0003}
+    h2{font-size:19px;margin:0 0 14px}label{display:block;font-size:14px;color:var(--muted);margin:12px 0 6px}
+    input,button{width:100%;padding:12px;border-radius:10px;border:1px solid #46618a;font:inherit}
+    input{background:#081a35;color:white}input[type=file]{padding:9px}
+    button{background:var(--blue);color:white;border:0;font-weight:700;margin-top:12px;cursor:pointer}
+    button.secondary{background:#213b63}button:disabled{opacity:.55}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.muted,.status{color:var(--muted);font-size:14px}
+    .song{display:flex;gap:12px;align-items:center;padding:12px 0;border-top:1px solid #294875}
+    .cover{width:58px;height:58px;flex:0 0 58px;border-radius:10px;background:#193c70;object-fit:cover}
+    .song-info{min-width:0;flex:1}.song-info strong{display:block;overflow-wrap:anywhere}.song audio{width:100%;margin-top:8px}
+    .hidden{display:none!important}.notice{padding:12px;border-radius:10px;background:#092d46;color:#bdefff;font-size:14px}
+    a{color:#77caff}.small{font-size:13px;color:var(--muted)}
+    @media(max-width:520px){.row{grid-template-columns:1fr}.panel{padding:15px}}
+  </style>
+</head>
+<body>
+<header>
+  <div class="logo">♫</div>
+  <h1>ISAIAS MUSIC</h1>
+  <p>A tua música, o teu mundo</p>
+</header>
+<main>
+  <section class="panel">
+    <h2>🎧 Descobrir músicas</h2>
+    <input id="search" type="search" placeholder="Pesquisar por música ou artista">
+    <p class="muted">As músicas publicadas aparecem aqui para todos ouvirem.</p>
+    <div id="songs"><p class="status">A carregar músicas…</p></div>
+  </section>
+
+  <section class="panel" id="accountPanel">
+    <h2>👤 A tua conta</h2>
+    <div class="row">
+      <div><label for="email">E-mail</label><input id="email" type="email" autocomplete="email" placeholder="teuemail@exemplo.com"></div>
+      <div><label for="password">Palavra-passe</label><input id="password" type="password" autocomplete="current-password" placeholder="Mínimo 6 caracteres"></div>
+    </div>
+    <div class="row">
+      <button id="register">Criar conta</button>
+      <button id="login" class="secondary">Iniciar sessão</button>
+    </div>
+    <button id="logout" class="secondary hidden">Terminar sessão</button>
+    <p id="accountStatus" class="status">Ainda não iniciaste sessão.</p>
+  </section>
+
+  <section class="panel hidden" id="uploadPanel">
+    <h2>⬆️ Publicar música</h2>
+    <p class="muted">Publica apenas músicas que criaste ou que tens autorização para partilhar.</p>
+    <label for="songTitle">Nome da música</label><input id="songTitle" maxlength="100" placeholder="Ex.: Minha Canção">
+    <label for="artist">Artista</label><input id="artist" maxlength="80" placeholder="Nome do artista">
+    <label for="audioFile">Ficheiro de áudio (MP3, WAV ou M4A)</label><input id="audioFile" type="file" accept="audio/*">
+    <label for="coverFile">Capa (opcional)</label><input id="coverFile" type="file" accept="image/*">
+    <button id="publish">Publicar música</button>
+    <p id="uploadStatus" class="status"></p>
+  </section>
+  <p class="notice">Nota: este é o ficheiro inicial do site. Para contas e publicação funcionarem, o projeto Firebase precisa de estar configurado corretamente e as regras de acesso precisam de ser definidas. O armazenamento de áudio pode ter limites ou exigir configuração/plano compatível; não atives faturação sem confirmar os custos com um adulto responsável.</p>
+  <p class="small">© <span id="year"></span> ISAIAS MUSIC</p>
+</main>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+  import { getFirestore, collection, addDoc, getDocs, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+  import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js";
+
+  // Configuração Web do Firebase fornecida para o projeto ISAIAS MUSIC.
+  const firebaseConfig = {
+    apiKey: "AIzaSyB1oiZqIa2QdnE092beqDXBlFELKtAFeeE",
+    authDomain: "isaiasmusic-e5c1c.firebaseapp.com",
+    projectId: "isaiasmusic-e5c1c",
+    storageBucket: "isaiasmusic-e5c1c.firebasestorage.app",
+    messagingSenderId: "476035306445",
+    appId: "1:476035306445:web:8265cb97da61097e30ea84",
+    measurementId: "G-NHZQWGQEG7"
+  };
+
+  const $ = id => document.getElementById(id);
+  $("year").textContent = new Date().getFullYear();
+  let app, auth, db, storage, currentUser = null, allSongs = [];
+
+  try {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+    storage = getStorage(app);
+    onAuthStateChanged(auth, user => {
+      currentUser = user;
+      $("accountStatus").textContent = user ? "Sessão iniciada: " + user.email : "Ainda não iniciaste sessão.";
+      $("uploadPanel").classList.toggle("hidden", !user);
+      $("logout").classList.toggle("hidden", !user);
+      $("register").classList.toggle("hidden", !!user);
+      $("login").classList.toggle("hidden", !!user);
+    });
+    loadSongs();
+  } catch (e) {
+    $("accountStatus").textContent = "Erro ao iniciar Firebase: " + e.message;
+  }
+
+  $("register").onclick = async () => {
+    try {
+      const email = $("email").value.trim(), password = $("password").value;
+      if (!email || password.length < 6) throw new Error("Indica um e-mail e uma palavra-passe com pelo menos 6 caracteres.");
+      await createUserWithEmailAndPassword(auth, email, password);
+      alert("Conta criada com sucesso!");
+    } catch(e) { alert("Não foi possível criar a conta: " + e.message); }
+  };
+  $("login").onclick = async () => {
+    try {
+      await signInWithEmailAndPassword(auth, $("email").value.trim(), $("password").value);
+    } catch(e) { alert("Não foi possível iniciar sessão: " + e.message); }
+  };
+  $("logout").onclick = async () => { try { await signOut(auth); } catch(e) { alert(e.message); } };
+
+  async function loadSongs() {
+    try {
+      const snap = await getDocs(query(collection(db, "songs"), orderBy("createdAt", "desc")));
+      allSongs = snap.docs.map(d => ({id:d.id, ...d.data()}));
+      renderSongs();
+    } catch(e) {
+      $("songs").innerHTML = '<p class="status">Ainda não foi possível carregar músicas. Verifica as regras do Firestore e tenta novamente. (' + escapeHtml(e.code || e.message) + ')</p>';
+    }
+  }
+  function escapeHtml(s) {
+    return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+  function renderSongs() {
+    const term = $("search").value.trim().toLowerCase();
+    const filtered = allSongs.filter(s => (s.title+" "+s.artist).toLowerCase().includes(term));
+    if (!filtered.length) { $("songs").innerHTML = '<p class="status">Ainda não há músicas publicadas.</p>'; return; }
+    $("songs").innerHTML = filtered.map(s => `
+      <article class="song">
+        <img class="cover" src="${escapeHtml(s.coverUrl || '')}" alt="" onerror="this.style.display='none'">
+        <div class="song-info"><strong>${escapeHtml(s.title || "Sem título")}</strong><span class="muted">${escapeHtml(s.artist || "Artista desconhecido")}</span>
+        <audio controls preload="none" src="${escapeHtml(s.audioUrl || '')}"></audio></div>
+      </article>`).join("");
+  }
+  $("search").addEventListener("input", renderSongs);
+
+  $("publish").onclick = async () => {
+    const title = $("songTitle").value.trim(), artist = $("artist").value.trim();
+    const audio = $("audioFile").files[0], cover = $("coverFile").files[0];
+    try {
+      if (!currentUser) throw new Error("Inicia sessão primeiro.");
+      if (!title || !artist || !audio) throw new Error("Preenche o título, artista e escolhe o áudio.");
+      if (!audio.type.startsWith("audio/")) throw new Error("Escolhe um ficheiro de áudio válido.");
+      if (audio.size > 15 * 1024 * 1024) throw new Error("O áudio deve ter no máximo 15 MB nesta versão inicial.");
+      $("publish").disabled = true; $("uploadStatus").textContent = "A enviar… mantém esta página aberta.";
+      const safeName = audio.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const audioRef = ref(storage, `songs/${currentUser.uid}/${Date.now()}_${safeName}`);
+      await uploadBytes(audioRef, audio);
+      const audioUrl = await getDownloadURL(audioRef);
+      let coverUrl = "";
+      if (cover) {
+        if (!cover.type.startsWith("image/")) throw new Error("A capa deve ser uma imagem.");
+        if (cover.size > 3 * 1024 * 1024) throw new Error("A capa deve ter no máximo 3 MB.");
+        const coverRef = ref(storage, `covers/${currentUser.uid}/${Date.now()}_${cover.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`);
+        await uploadBytes(coverRef, cover);
+        coverUrl = await getDownloadURL(coverRef);
+      }
+      await addDoc(collection(db, "songs"), {title, artist, audioUrl, coverUrl, ownerUid:currentUser.uid, ownerEmail:currentUser.email || "", createdAt:serverTimestamp()});
+      $("uploadStatus").textContent = "Música publicada com sucesso!";
+      $("songTitle").value = ""; $("artist").value = ""; $("audioFile").value = ""; $("coverFile").value = "";
+      await loadSongs();
+    } catch(e) { $("uploadStatus").textContent = "Erro: " + e.message; }
+    finally { $("publish").disabled = false; }
+  };
+</script>
+</body>
+</html>
